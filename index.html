@@ -1,0 +1,492 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <meta name="theme-color" content="#ffffff">
+    <title>Стрелки — Кто быстрее</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+        html, body { height: 100%; overflow: hidden; font-family: "Segoe UI", Arial, sans-serif; background: #fff; }
+
+        /* ===== АРЕНА ===== */
+        #stage {
+            position: fixed; inset: 0;
+            display: flex; align-items: center; justify-content: center;
+            background: #fff;
+        }
+        #arrow { width: 78vmin; height: 78vmin; opacity: 0; transition: opacity .08s linear; }
+        #arrow.show { opacity: 1; }
+        #arrow line, #arrow polyline { fill: none; stroke-width: 26; stroke-linecap: round; stroke-linejoin: round; }
+        #arrow.dashed line, #arrow.dashed polyline { stroke-dasharray: 20 26; }
+        /* Подложка: тёмный обводок под стрелкой. Невидим для цветных (рисуется под ними),
+           но делает видимой БЕЛУЮ стрелку на белом фоне. */
+        #arrow .ol { stroke: #1A1A1A; stroke-width: 44; }
+        #arrow.blink { animation: blink .22s steps(1, end) infinite; }
+        @keyframes blink { 0%, 49% { opacity: 1; } 50%, 100% { opacity: 0; } }
+
+        /* ===== ТАЙМЕР ===== */
+        #timer {
+            position: fixed; top: 14px; left: 50%; transform: translateX(-50%);
+            font-size: 22px; font-weight: 700; color: #888;
+        }
+        #timer.running { color: #333; }
+        #timer.finished { color: #e74c3c; animation: blink .5s steps(1, end) 3; }
+
+        /* ===== ПОДСКАЗКА ===== */
+        #hint {
+            position: fixed; left: 50%; bottom: 6px; transform: translateX(-50%);
+            font-size: 13px; color: #bbb; white-space: nowrap;
+        }
+
+        /* ===== ПАНЕЛЬ НАСТРОЕК ===== */
+        #panel {
+            position: fixed; top: 0; right: 0;
+            width: 268px; max-width: 88vw; max-height: 100vh;
+            overflow-y: auto; background: #fafafa;
+            border-left: 1px solid #e2e2e2;
+            padding: 12px 14px 24px;
+            transform: translateX(100%); transition: transform .22s ease; z-index: 30;
+        }
+        #panel.open { transform: translateX(0); }
+        #panel h2 { font-size: 14px; margin-bottom: 10px; color: #333; }
+        #panel .field { margin-bottom: 12px; }
+        #panel label { display: block; font-size: 12px; color: #666; margin-bottom: 4px; }
+        #panel select, #panel input[type=number] {
+            width: 100%; padding: 7px; font-size: 14px;
+            border: 1px solid #ccc; border-radius: 6px; background: #fff;
+        }
+        #panel .chk { display: flex; align-items: center; gap: 8px; font-size: 13px; color: #333; margin-bottom: 7px; }
+        #panel .chk input { width: 17px; height: 17px; }
+        #panel hr { border: 0; border-top: 1px solid #e5e5e5; margin: 12px 0; }
+
+        .presets { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+        .presets button {
+            padding: 8px 4px; font-size: 11px; border: 1px solid #ccc;
+            border-radius: 6px; background: #fff; cursor: pointer;
+        }
+        .presets button.easy { border-color: #a5dfba; background: #f2fbf5; }
+        .presets button.hard { border-color: #f3b9b1; background: #fdf4f3; }
+        .presets button.base { grid-column: 1 / -1; border-color: #b8d4f0; background: #f2f8fd; }
+
+        /* ===== КНОПКИ ===== */
+        .fab {
+            position: fixed; z-index: 40; border: none; border-radius: 50%;
+            cursor: pointer; font-size: 20px; line-height: 1;
+            background: #fff; box-shadow: 0 2px 8px rgba(0,0,0,.18);
+            display: flex; align-items: center; justify-content: center;
+        }
+        #gearBtn { top: 14px; right: 14px; width: 46px; height: 46px; }
+        #fsBtn   { top: 14px; right: 70px; width: 46px; height: 46px; font-size: 17px; }
+
+        #playBtn {
+            position: fixed; z-index: 40;
+            left: 50%; bottom: 26px; transform: translateX(-50%);
+            border: none; border-radius: 30px;
+            padding: 14px 40px; font-size: 17px; font-weight: 700;
+            color: #fff; background: #2ecc71; cursor: pointer;
+            box-shadow: 0 3px 10px rgba(0,0,0,.2);
+        }
+        #playBtn.running { background: #e74c3c; }
+        #playBtn:disabled { background: #ccc; cursor: not-allowed; }
+
+        #status {
+            position: fixed; z-index: 40; top: 16px; left: 16px;
+            font-size: 13px; color: #aaa; line-height: 1.5;
+        }
+        #status b { color: #555; }
+    </style>
+</head>
+<body>
+<div id="stage">
+    <svg id="arrow" viewBox="0 0 200 200" aria-hidden="true">
+        <g id="arrowG" transform="rotate(0 100 100)">
+            <g id="outline">
+                <line class="ol" x1="34" y1="100" x2="150" y2="100" />
+                <polyline class="ol" points="112,58 160,100 112,142" />
+            </g>
+            <g id="main">
+                <line x1="34" y1="100" x2="150" y2="100" />
+                <polyline points="112,58 160,100 112,142" />
+            </g>
+        </g>
+    </svg>
+</div>
+
+<div id="timer">1:30</div>
+<div id="status"></div>
+<div id="hint"></div>
+
+<button class="fab" id="fsBtn"   title="Полный экран">⛶</button>
+<button class="fab" id="gearBtn" title="Настройки">⚙</button>
+<button id="playBtn">▶ СТАРТ</button>
+
+<div id="panel">
+    <h2>⚙ Настройки</h2>
+
+    <div class="field">
+        <label>🎮 Пресеты уровней</label>
+        <div class="presets">
+            <button class="easy" data-preset="L3">L3 самый простой</button>
+            <button class="easy" data-preset="L2">L2 лёгкий</button>
+            <button class="easy" data-preset="L1">L1 чуть легче</button>
+            <button class="base" data-preset="BASE">BASE (1 с, 1,5 мин)</button>
+            <button class="hard" data-preset="H1">H1 чуть сложнее</button>
+            <button class="hard" data-preset="H2">H2 сложнее</button>
+            <button class="hard" data-preset="H3">H3 самый сложный</button>
+        </div>
+    </div>
+    <hr>
+
+    <div class="field">
+        <label>⏱ Длительность серии</label>
+        <select id="duration">
+            <option value="0.5">30 секунд</option>
+            <option value="1">1 минута</option>
+            <option value="1.5" selected>1,5 минуты (90 с) — базовая</option>
+            <option value="2">2 минуты</option>
+            <option value="3">3 минуты</option>
+            <option value="4">4 минуты</option>
+            <option value="5">5 минут</option>
+            <option value="6">6 минут</option>
+            <option value="8">8 минут</option>
+            <option value="10">10 минут</option>
+        </select>
+    </div>
+
+    <div class="field">
+        <label>⚡ Интервал смены стрелок (секунды)</label>
+        <select id="interval">
+            <option value="0.5">0,5 с (очень быстро)</option>
+            <option value="1" selected>1,0 с (базовый)</option>
+            <option value="2">2,0 с (средне)</option>
+            <option value="3">3,0 с (медленно)</option>
+        </select>
+    </div>
+
+    <div class="field">
+        <label>🎨 Количество цветов</label>
+        <select id="colors">
+            <option value="1">1 — только жёлтый (цвет не важен)</option>
+            <option value="2" selected>2 — жёлтый, зелёный</option>
+            <option value="4">4 — жёлтый, зелёный, синий, красный</option>
+            <option value="6">6 — + чёрный и белый</option>
+        </select>
+    </div>
+
+    <div class="field">
+        <label>➡️ Направления</label>
+        <select id="dirs">
+            <option value="2" selected>2 — влево / вправо</option>
+            <option value="4">4 — влево / вправо / вверх / вниз</option>
+        </select>
+    </div>
+    <hr>
+
+    <div class="field">
+        <label>〰 Пунктирная стрелка (цвет наоборот)</label>
+        <select id="dashed">
+            <option value="0">выключены</option>
+            <option value="1">включены</option>
+            <option value="2">случайно (~30%)</option>
+        </select>
+    </div>
+
+    <div class="field">
+        <label>✨ Мигающая стрелка (сторона наоборот)</label>
+        <select id="blinkMode">
+            <option value="0">выключены</option>
+            <option value="1">включены</option>
+            <option value="2">случайно (~30%)</option>
+        </select>
+    </div>
+    <hr>
+
+    <div class="chk"><input type="checkbox" id="sound"><label for="sound" style="margin:0">Звук при смене сигнала</label></div>
+    <div class="chk"><input type="checkbox" id="showDecode"><label for="showDecode" style="margin:0">Показывать подсказку-расшифровку</label></div>
+
+    <hr>
+    <div style="font-size:11px;color:#999;line-height:1.4">Настройки применяются сразу, адрес страницы обновляется автоматически.</div>
+</div>
+
+<script>
+'use strict';
+
+/* ================= КОНСТАНТЫ ================= */
+// Порядок фиксирован: базовая четвёрка + чёрный и белый (расширенный набор)
+const COLORS = [
+    { id: 'yellow', css: '#F4D03F', name: 'ЖЁЛТЫЙ'  },
+    { id: 'green',  css: '#27AE60', name: 'ЗЕЛЁНЫЙ'  },
+    { id: 'blue',   css: '#3498DB', name: 'СИНИЙ'    },
+    { id: 'red',    css: '#E74C3C', name: 'КРАСНЫЙ'  },
+    { id: 'black',  css: '#1A1A1A', name: 'ЧЁРНЫЙ'   },
+    { id: 'white',  css: '#FFFFFF', name: 'БЕЛЫЙ'    }
+];
+const OPPOSITE_COLOR = {
+    yellow: 'СИНИЙ',  blue: 'ЖЁЛТЫЙ',
+    green: 'КРАСНЫЙ', red: 'ЗЕЛЁНЫЙ',
+    black: 'БЕЛЫЙ',   white: 'ЧЁРНЫЙ'
+};
+const ROT = { right: 0, down: 90, left: 180, up: 270 };
+const SIDE_NAME = { right: 'СПРАВА', down: 'ВНИЗ', left: 'СЛЕВА', up: 'ВВЕРХ' };
+const OPPOSITE_SIDE = { right: 'СЛЕВА', left: 'СПРАВА', up: 'ВНИЗ', down: 'ВВЕРХ' };
+
+const PRESETS = {
+    L3:   { duration: 1.5, interval: 3.0, colors: 1, dirs: 2, dashed: 0, blinkMode: 0 },
+    L2:   { duration: 1.5, interval: 3.0, colors: 2, dirs: 2, dashed: 0, blinkMode: 0 },
+    L1:   { duration: 3,   interval: 2.0, colors: 4, dirs: 2, dashed: 0, blinkMode: 0 },
+    BASE: { duration: 1.5, interval: 1.0, colors: 4, dirs: 2, dashed: 0, blinkMode: 0 },
+    H1:   { duration: 1.5, interval: 0.5, colors: 4, dirs: 2, dashed: 0, blinkMode: 0 },
+    H2:   { duration: 2,   interval: 0.5, colors: 6, dirs: 2, dashed: 2, blinkMode: 0 },
+    H3:   { duration: 3,   interval: 0.5, colors: 6, dirs: 4, dashed: 2, blinkMode: 2 }
+};
+
+/* ================= ЭЛЕМЕНТЫ ================= */
+const $ = id => document.getElementById(id);
+const arrow   = $('arrow'), arrowG = $('arrowG');
+const outline = $('outline'), mainG = $('main');
+const playBtn = $('playBtn'), panel = $('panel');
+const timerEl = $('timer'), statusEl = $('status'), hintEl = $('hint');
+
+/* ================= СОСТОЯНИЕ ================= */
+let running = false, timer = null, tick = 0, finished = false;
+let countdown = null, remaining = 0, startedAt = 0;
+let last = null;   // последняя показанная стрелка { color, dir }
+
+/* ================= УТИЛИТЫ ================= */
+const rnd = n => Math.floor(Math.random() * n);
+const pick = arr => arr[rnd(arr.length)];
+
+function settings() {
+    return {
+        duration:   Math.max(0.5, Math.min(10, parseFloat($('duration').value) || 1.5)),
+        interval:   Math.max(0.2, parseFloat($('interval').value) || 1),
+        colors:     parseInt($('colors').value, 10),
+        dirs:       parseInt($('dirs').value, 10),
+        dashed:     parseInt($('dashed').value, 10),
+        blinkMode:  parseInt($('blinkMode').value, 10),
+        sound:      $('sound').checked,
+        showDecode: $('showDecode').checked
+    };
+}
+
+function roll(mode) {
+    if (mode === 1) return true;
+    if (mode === 2) return Math.random() < 0.3;
+    return false;
+}
+
+/* ================= ФОРМАТИРОВАНИЕ ВРЕМЕНИ ================= */
+function formatTime(sec) {
+    const m = Math.floor(sec / 60);
+    const s = Math.floor(sec % 60);
+    return `${m}:${s.toString().padStart(2, '0')}`;
+}
+
+/* ================= ЗВУК ================= */
+let audioCtx = null;
+function beep(freq, dur, gainVal) {
+    try {
+        audioCtx = audioCtx || new (window.AudioContext || window.webkitAudioContext)();
+        const osc = audioCtx.createOscillator(), gain = audioCtx.createGain();
+        osc.frequency.value = freq; osc.type = 'square';
+        gain.gain.setValueAtTime(gainVal, audioCtx.currentTime);
+        gain.gain.exponentialRampToValueAtTime(0.0001, audioCtx.currentTime + dur);
+        osc.connect(gain); gain.connect(audioCtx.destination);
+        osc.start(); osc.stop(audioCtx.currentTime + dur);
+    } catch (e) {}
+}
+
+function finalBeep() {
+    [880, 1100, 1320].forEach((f, i) => setTimeout(() => beep(f, 0.3, 0.06), i * 200));
+}
+
+/* ================= ПОКАЗ СТРЕЛКИ ================= */
+function showArrow() {
+    const s = settings();
+    tick++;
+
+    const palette = COLORS.slice(0, s.colors);
+    const dirs    = ['left', 'right', 'up', 'down'].slice(0, s.dirs);
+
+    // Одинаковая стрелка подряд выглядит как «ничего не сменилось» — исключаем
+    // повтор пары «цвет + направление» из прошлого показа.
+    const combos = [];
+    palette.forEach(c => dirs.forEach(d => {
+        if (!last || c.id !== last.color || d !== last.dir) combos.push({ color: c, dir: d });
+    }));
+    const { color, dir } = pick(combos);
+    last = { color: color.id, dir };
+
+    const oppositeOnTable = palette.some(c => c.id === OPPOSITE_COLOR[color.id]);
+    const dashed = oppositeOnTable && roll(s.dashed);
+    const blink  = roll(s.blinkMode);
+
+    arrow.setAttribute('class', 'show' + (dashed ? ' dashed' : '') + (blink ? ' blink' : ''));
+    arrowG.setAttribute('transform', `rotate(${ROT[dir]} 100 100)`);
+
+    // Белая стрелка на белом фоне не видна — оставляем ей тёмный подложечный контур.
+    // Для всех остальных цветов подложка красится в тот же цвет и становится незаметной.
+    const olColor = color.id === 'white' ? '#1A1A1A' : color.css;
+    outline.querySelectorAll('line, polyline').forEach(el => el.style.stroke = olColor);
+    mainG.querySelector('line').style.stroke = color.css;
+    mainG.querySelector('polyline').style.stroke = color.css;
+
+    if (s.showDecode) {
+        const realColor = dashed ? OPPOSITE_COLOR[color.id] : color.name;
+        const realSide  = blink ? OPPOSITE_SIDE[dir] : SIDE_NAME[dir];
+        hintEl.textContent = `${realColor} · ${realSide}`;
+    } else {
+        hintEl.textContent = '';
+    }
+
+    if (s.sound) beep(dashed || blink ? 660 : 880, 0.05, 0.04);
+
+    statusEl.innerHTML = `сигнал <b>${tick}</b>`;
+
+    timer = setTimeout(showArrow, s.interval * 1000);
+}
+
+/* ================= ОБРАТНЫЙ ОТСЧЁТ ================= */
+function updateTimer() {
+    remaining--;
+    timerEl.textContent = formatTime(remaining);
+    if (remaining <= 0) {
+        stop();
+        finalBeep();
+        timerEl.classList.add('finished');
+        setTimeout(() => timerEl.classList.remove('finished'), 2000);
+    }
+}
+
+/* ================= СТАРТ / СТОП ================= */
+function start() {
+    const s = settings();
+    running = true; finished = false; tick = 0; startedAt = Date.now(); last = null;
+    remaining = Math.round(s.duration * 60);
+
+    playBtn.textContent = '⏹ СТОП';
+    playBtn.classList.add('running');
+    playBtn.disabled = false;
+    timerEl.classList.add('running');
+    timerEl.textContent = formatTime(remaining);
+    statusEl.innerHTML = 'Идёт серия…';
+    hintEl.textContent = '';
+    timerEl.classList.remove('finished');
+
+    beep(880, 0.12, 0.05);
+    showArrow();
+    countdown = setInterval(updateTimer, 1000);
+}
+
+function stop() {
+    running = false; finished = true;
+    clearTimeout(timer);
+    clearInterval(countdown);
+    playBtn.textContent = '▶ СТАРТ';
+    playBtn.classList.remove('running');
+    arrow.setAttribute('class', '');
+    timerEl.classList.remove('running');
+    hintEl.textContent = '';
+    statusEl.innerHTML = `всего сигналов: <b>${tick}</b>`;
+    timerEl.textContent = formatTime(Math.round(settings().duration * 60));
+}
+
+playBtn.addEventListener('click', () => running ? stop() : start());
+
+/* ================= ПРОСЕТЫ ================= */
+function applyPreset(name) {
+    const p = PRESETS[name];
+    if (!p) return;
+    $('duration').value     = p.duration;
+    $('interval').value     = p.interval;
+    $('colors').value       = String(p.colors);
+    $('dirs').value         = String(p.dirs);
+    $('dashed').value       = String(p.dashed);
+    $('blinkMode').value    = String(p.blinkMode);
+    save();
+    // Новый уровень = новая серия: перезапускаем с полным временем
+    if (running) { stop(); start(); }
+}
+
+document.querySelectorAll('[data-preset]').forEach(b =>
+    b.addEventListener('click', () => applyPreset(b.dataset.preset)));
+
+/* ================= СОХРАНЕНИЕ / ССЫЛКА ================= */
+function settingsQuery(s) {
+    return `?d=${s.duration}&i=${s.interval}&c=${s.colors}&r=${s.dirs}` +
+           `&x=${s.dashed}&b=${s.blinkMode}&snd=${s.sound ? 1 : 0}&hint=${s.showDecode ? 1 : 0}`;
+}
+
+// Любое изменение настроек сразу переводит страницу на адрес с новыми параметрами,
+// поэтому ссылку не нужно копировать и вставлять вручную.
+function save() {
+    const s = settings();
+    try { localStorage.setItem('arrows', JSON.stringify(s)); } catch (e) {}
+
+    const query = settingsQuery(s);
+    if (location.search === query) return;
+    try {
+        // Без перезагрузки — идущая серия не прерывается
+        history.replaceState(null, '', location.pathname + query);
+    } catch (e) {
+        // Некоторые браузеры запрещают replaceState для file:// — тогда переходим
+        // на новый адрес обычным способом, но только когда серия не идёт
+        if (!running) location.replace(location.pathname + query);
+    }
+    updateTimerIdle();
+}
+
+function updateTimerIdle() {
+    if (!running) timerEl.textContent = formatTime(Math.round(settings().duration * 60));
+}
+
+function loadFromURL() {
+    const q = new URLSearchParams(location.search);
+    if ([...q].length) {
+        if (q.has('d')) $('duration').value = q.get('d');
+        if (q.has('i')) $('interval').value = q.get('i');
+        if (q.has('c')) $('colors').value = q.get('c');
+        if (q.has('r')) $('dirs').value = q.get('r');
+        if (q.has('x')) $('dashed').value = q.get('x');
+        if (q.has('b')) $('blinkMode').value = q.get('b');
+        if (q.has('snd')) $('sound').checked = q.get('snd') === '1';
+        if (q.has('hint')) $('showDecode').checked = q.get('hint') === '1';
+        return;
+    }
+    try {
+        const s = JSON.parse(localStorage.getItem('arrows') || 'null');
+        if (!s) return;
+        $('duration').value = s.duration; $('interval').value = s.interval;
+        $('colors').value = s.colors; $('dirs').value = s.dirs;
+        $('dashed').value = s.dashed; $('blinkMode').value = s.blinkMode;
+        $('sound').checked = !!s.sound; $('showDecode').checked = !!s.showDecode;
+    } catch (e) {}
+}
+
+document.querySelectorAll('#panel input, #panel select').forEach(el =>
+    el.addEventListener('change', save));
+
+/* ================= ИНТЕРФЕЙС ================= */
+$('gearBtn').addEventListener('click', () => panel.classList.toggle('open'));
+$('fsBtn').addEventListener('click', () => {
+    if (document.fullscreenElement) document.exitFullscreen();
+    else document.documentElement.requestFullscreen().catch(() => {});
+});
+
+document.addEventListener('keydown', e => {
+    if (e.code === 'Space') { e.preventDefault(); running ? stop() : start(); }
+    if (e.key === 'Escape') stop();
+    if (e.key === 'f') $('fsBtn').click();
+    if (e.key === 'p') panel.classList.toggle('open');
+});
+
+['gesturestart', 'dblclick'].forEach(ev =>
+    document.addEventListener(ev, e => e.preventDefault()));
+
+loadFromURL();
+// Сразу приводим адрес к актуальным настройкам и показываем длительность на табло
+save();
+</script>
+</body>
+</html>
